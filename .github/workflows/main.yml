@@ -32,7 +32,7 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Fix JVM target
+      - name: Fix JVM target and dependencies
         run: |
           cat >> AuroraPlayer/app/build.gradle.kts <<'EOF'
 
@@ -45,7 +45,12 @@ jobs:
                   jvmTarget = "17"
               }
           }
+
+          dependencies {
+              implementation("androidx.core:core-ktx:1.15.0")
+          }
           EOF
+          
 
       - name: Build APK
         run: gradle -p AuroraPlayer assembleDebug
