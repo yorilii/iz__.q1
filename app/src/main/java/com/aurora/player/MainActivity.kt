@@ -476,6 +476,94 @@ private fun MiniPlayer(track: Track, playing: Boolean, onToggle: () -> Unit, onO
     }
 }
 
+
+@Composable
+private fun LyricsContent(
+    result: LyricsResult?,
+    loading: Boolean,
+    activeIndex: Int
+) {
+    val lines = result?.lines.orEmpty()
+    val listState = rememberLazyListState()
+
+    LaunchedEffect(activeIndex, lines.size) {
+        if (activeIndex >= 0 && lines.isNotEmpty()) {
+            listState.animateScrollToItem((activeIndex - 2).coerceAtLeast(0))
+        }
+    }
+
+    Column(
+        Modifier.fillMaxSize().padding(horizontal = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            "LYRICS",
+            color = Muted,
+            fontSize = 10.sp,
+            letterSpacing = 2.4.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(top = 8.dp, bottom = 18.dp)
+        )
+        when {
+            loading -> {
+                Spacer(Modifier.height(28.dp))
+                CircularProgressIndicator(color = Paper)
+                Text("Finding synced lyrics…", color = Muted, modifier = Modifier.padding(top = 14.dp))
+            }
+            lines.isNotEmpty() -> {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(vertical = 36.dp, horizontal = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(22.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    itemsIndexed(lines) { index, line ->
+                        Text(
+                            text = line.text.ifBlank { "♪" },
+                            color = if (index == activeIndex) Paper else Color(0xFF696C74),
+                            fontSize = if (index == activeIndex) 23.sp else 18.sp,
+                            fontWeight = if (index == activeIndex) FontWeight.Bold else FontWeight.Medium,
+                            lineHeight = if (index == activeIndex) 31.sp else 26.sp,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                    }
+                }
+            }
+            result?.instrumental == true -> {
+                Spacer(Modifier.height(44.dp))
+                Icon(Icons.Rounded.MusicNote, contentDescription = null, tint = Muted, modifier = Modifier.size(42.dp))
+                Text("Instrumental track", color = Paper, fontSize = 18.sp, modifier = Modifier.padding(top = 16.dp))
+                Text("This track has no lyrics.", color = Muted, fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp))
+            }
+            !result?.plainText.isNullOrBlank() -> {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(vertical = 20.dp, horizontal = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    items(result!!.plainText!!.lines().size) { index ->
+                        Text(
+                            result.plainText!!.lines()[index],
+                            color = Paper,
+                            fontSize = 17.sp,
+                            lineHeight = 25.sp,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                    }
+                }
+            }
+            else -> {
+                Spacer(Modifier.height(42.dp))
+                Icon(Icons.Rounded.Lyrics, contentDescription = null, tint = Muted, modifier = Modifier.size(42.dp))
+                Text("No lyrics found", color = Paper, fontSize = 18.sp, modifier = Modifier.padding(top = 16.dp))
+                Text("LRCLIB doesn't have a matching synced version yet.", color = Muted, fontSize = 12.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.padding(top = 8.dp))
+            }
+        }
+    }
+}
+
 private fun formatTime(milliseconds: Long): String {
     val totalSeconds = (milliseconds / 1000).coerceAtLeast(0)
     return "%d:%02d".format(totalSeconds / 60, totalSeconds % 60)
