@@ -1,63 +1,28 @@
 name: Build Aurora Player APK
-
 on:
-  workflow_dispatch:
+  pull_request:
+    branches: [main]
   push:
-    branches: [main, master]
-
+    branches: [main, aurora-rebuild]
+  workflow_dispatch:
 permissions:
   contents: read
-
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Extract project
-        run: |
-          unzip AuroraPlayer-Source.zip
-          ls AuroraPlayer
-
-      - name: Setup Java
-        uses: actions/setup-java@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.9'
-
-      - name: Fix JVM target and dependencies
-        run: |
-          cat >> AuroraPlayer/app/build.gradle.kts <<'EOF'
-
-          android {
-              compileOptions {
-                  sourceCompatibility = JavaVersion.VERSION_17
-                  targetCompatibility = JavaVersion.VERSION_17
-              }
-              kotlinOptions {
-                  jvmTarget = "17"
-              }
-          }
-
-          dependencies {
-              implementation("androidx.core:core-ktx:1.15.0")
-          }
-          EOF
-          
-
-      - name: Build APK
-        run: gradle -p AuroraPlayer assembleDebug
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
+          gradle-version: "8.9"
+      - name: Build debug APK
+        run: gradle assembleDebug
+      - uses: actions/upload-artifact@v4
         with:
           name: Aurora-Player-APK
-          path: AuroraPlayer/app/build/outputs/apk/debug/app-debug.apk
-          
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
