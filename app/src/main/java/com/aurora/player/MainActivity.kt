@@ -49,6 +49,8 @@ data class Track(
     val id: Long,
     val title: String,
     val artist: String,
+    val album: String,
+    val durationMs: Long,
     val uri: Uri,
     val artwork: Uri?
 )
@@ -96,6 +98,8 @@ class MainActivity : ComponentActivity() {
             MediaStore.Audio.Media._ID,
             MediaStore.Audio.Media.TITLE,
             MediaStore.Audio.Media.ARTIST,
+            MediaStore.Audio.Media.ALBUM,
+            MediaStore.Audio.Media.DURATION,
             MediaStore.Audio.Media.ALBUM_ID
         )
         val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
@@ -103,6 +107,8 @@ class MainActivity : ComponentActivity() {
             val idCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
             val titleCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
             val artistCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
+            val albumNameCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
+            val durationCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
             val albumCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
             while (cursor.moveToNext()) {
                 val id = cursor.getLong(idCol)
@@ -112,6 +118,8 @@ class MainActivity : ComponentActivity() {
                     id = id,
                     title = cursor.getString(titleCol)?.takeIf { it.isNotBlank() } ?: "Unknown title",
                     artist = cursor.getString(artistCol)?.takeIf { it.isNotBlank() && it != "<unknown>" } ?: "Unknown artist",
+                    album = cursor.getString(albumNameCol)?.takeIf { it.isNotBlank() } ?: "",
+                    durationMs = cursor.getLong(durationCol),
                     uri = Uri.withAppendedPath(collection, id.toString()),
                     artwork = art
                 )
@@ -134,12 +142,24 @@ private fun AuroraScreen(
     onRequestPermission: () -> Unit
 ) {
     var libraryOpen by remember { mutableStateOf(false) }
+    var lyricsOpen by remember { mutableStateOf(false) }
     var search by remember { mutableStateOf("") }
     var playing by remember { mutableStateOf(false) }
     var duration by remember { mutableLongStateOf(0L) }
     var position by remember { mutableLongStateOf(0L) }
     val currentIndex = player?.currentMediaItemIndex ?: -1
     val currentTrack = tracks.getOrNull(currentIndex)
+    var lyricsResult by remember(currentTrack?.id) { mutableStateOf<LyricsResult?>(null) }
+    var lyricsLoading by remember(currentTrack?.id) { mutableStateOf(false) }
+    LaunchedEffect(currentTrack?.id) {
+        lyricsResult = null
+        if (currentTrack != null) {
+            lyricsLoading = true
+            lyricsResult = LyricsRepository.load(currentTrack)
+            lyricsLoading = false
+        }
+    }
+    val activeLyricIndex = lyricsResult?.lines?.indexOfLast { it.timeMs <= position } ?: -1
     val visibleTracks = remember(tracks, search) {
         if (search.isBlank()) tracks else tracks.filter {
             it.title.contains(search, true) || it.artist.contains(search, true)
@@ -178,18 +198,20 @@ private fun AuroraScreen(
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("A U R O R A", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.8.sp)
-                    Text(if (libraryOpen) "Your collection" else "Made for your moments", color = Paper, fontSize = 23.sp, fontWeight = FontWeight.SemiBold)
+                    Text(if (lyricsOpen) "Now singing" else if (libraryOpen) "Your collection" else "Made for your moments", color = Paper, fontSize = 23.sp, fontWeight = FontWeight.SemiBold)
                 }
                 IconButton(
-                    onClick = { libraryOpen = !libraryOpen },
+                    onClick = { if (lyricsOpen) lyricsOpen = false else libraryOpen = !libraryOpen },
                     modifier = Modifier.size(44.dp).clip(CircleShape).background(Panel)
                 ) {
-                    Icon(if (libraryOpen) Icons.Rounded.GraphicEq else Icons.Rounded.QueueMusic, contentDescription = "Switch view", tint = Paper)
+                    Icon(if (lyricsOpen) Icons.Rounded.ArrowBack else if (libraryOpen) Icons.Rounded.GraphicEq else Icons.Rounded.QueueMusic, contentDescription = "Switch view", tint = Paper)
                 }
             }
 
-            AnimatedContent(targetState = libraryOpen, label = "main-content") { showLibrary ->
-                if (showLibrary) {
+            AnimatedContent(targetState = if (lyricsOpen) 2 else if (libraryOpen) 1 else 0, label = "main-content") { screen ->
+                if (screen == 2) {
+                    LyricsContent(result = lyricsResult, loading = lyricsLoading, activeIndex = activeLyricIndex)
+                } else if (screen == 1) {
                     LibraryContent(
                         tracks = visibleTracks,
                         query = search,
@@ -206,6 +228,7 @@ private fun AuroraScreen(
                         duration = duration,
                         position = position,
                         onOpenLibrary = { libraryOpen = true },
+                        onOpenLyrics = { lyricsOpen = true },
                         onPlayTrack = { index -> playTracks(tracks, index, player) },
                         onToggle = { if (playing) player?.pause() else player?.play() },
                         onPrevious = { player?.seekToPreviousMediaItem() },
@@ -244,6 +267,7 @@ private fun HomeContent(
     duration: Long,
     position: Long,
     onOpenLibrary: () -> Unit,
+    onOpenLyrics: () -> Unit,
     onPlayTrack: (Int) -> Unit,
     onToggle: () -> Unit,
     onPrevious: () -> Unit,
@@ -295,8 +319,13 @@ private fun HomeContent(
                 Text(currentTrack?.title ?: "Nothing playing yet", color = Paper, fontSize = 19.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(currentTrack?.artist ?: "Choose a song from your library", color = Muted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            IconButton(onClick = onOpenLibrary) {
-                Icon(Icons.Rounded.List, contentDescription = "Open library", tint = Paper)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onOpenLyrics) {
+                    Icon(Icons.Rounded.Subtitles, contentDescription = "Open synced lyrics", tint = Paper)
+                }
+                IconButton(onClick = onOpenLibrary) {
+                    Icon(Icons.Rounded.List, contentDescription = "Open library", tint = Paper)
+                }
             }
         }
         Slider(
