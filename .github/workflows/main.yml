@@ -1,5 +1,7 @@
 name: Build Aurora Player APK
 on:
+  pull_request:
+    branches: [main]
   push:
     branches: [main, aurora-rebuild]
   workflow_dispatch:
