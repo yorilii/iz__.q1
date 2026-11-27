@@ -26,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -194,7 +195,7 @@ private fun AuroraScreen(
                         query = search,
                         onQueryChange = { search = it },
                         currentIndex = currentIndex,
-                        onTrackClick = { index -> playTracks(tracks, index, player) }
+                        onTrackClick = { index -> playTracks(visibleTracks, index, player) }
                     )
                 } else {
                     HomeContent(
@@ -209,6 +210,7 @@ private fun AuroraScreen(
                         onToggle = { if (playing) player?.pause() else player?.play() },
                         onPrevious = { player?.seekToPreviousMediaItem() },
                         onNext = { player?.seekToNextMediaItem() },
+                        onSeek = { player?.seekTo(it) },
                         granted = granted,
                         onRequestPermission = onRequestPermission
                     )
@@ -246,9 +248,15 @@ private fun HomeContent(
     onToggle: () -> Unit,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
+    onSeek: (Long) -> Unit,
     granted: Boolean,
     onRequestPermission: () -> Unit
 ) {
+    var sliderPosition by remember { mutableFloatStateOf(0f) }
+    var isSeeking by remember { mutableStateOf(false) }
+    LaunchedEffect(position, duration, isSeeking) {
+        if (!isSeeking) sliderPosition = if (duration > 0) position.coerceAtMost(duration).toFloat() / duration else 0f
+    }
     Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
             Modifier.fillMaxWidth().weight(1f).clip(RoundedCornerShape(28.dp))
@@ -259,7 +267,8 @@ private fun HomeContent(
                 AsyncImage(
                     model = currentTrack.artwork,
                     contentDescription = "Album artwork",
-                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(28.dp))
+                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(28.dp)),
+                    contentScale = ContentScale.Crop
                 )
             } else {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -291,8 +300,9 @@ private fun HomeContent(
             }
         }
         Slider(
-            value = if (duration > 0) position.coerceAtMost(duration).toFloat() / duration else 0f,
-            onValueChange = { fraction -> if (duration > 0) { /* seek is applied on release below */ } },
+            value = sliderPosition,
+            onValueChange = { fraction -> sliderPosition = fraction; isSeeking = true },
+            onValueChangeFinished = { if (duration > 0) onSeek((sliderPosition * duration).toLong()); isSeeking = false },
             modifier = Modifier.fillMaxWidth().height(28.dp),
             colors = SliderDefaults.colors(
                 thumbColor = Paper,
